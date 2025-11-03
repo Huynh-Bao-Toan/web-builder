@@ -48,36 +48,9 @@ $builderOutputPath = './output/'; // Path to builder output files
     <script>
         // Set API base URL for api-handler (using mock API)
         window.API_BASE_URL = '<?php echo $apiBaseUrl; ?>mock-api.php';
-        
-        // Optional: Configure component endpoints mapping
-        window.API_ENDPOINTS = {
-            products: {
-                all: '/api/products/all',
-                sweety: '/api/products/sweety',
-                moony: '/api/products/moony',
-                huggies: '/api/products/huggies',
-                merries: '/api/products/merries'
-            },
-            vouchers: {
-                all: '/api/vouchers/all',
-                'free-ship': '/api/vouchers/free-ship',
-                discount: '/api/vouchers/discount',
-                gift: '/api/vouchers/gift'
-            }
-        };
 
         // Optional: Component management functions
         window.LandingPageComponents = {
-            /**
-             * Get component data from PHP/Server
-             * This can be used as alternative to API calls
-             */
-            getComponentData: function(type, endpoint) {
-                // Example: Call PHP endpoint instead of external API
-                return fetch('<?php echo $apiBaseUrl; ?>' + endpoint)
-                    .then(response => response.json());
-            },
-
             /**
              * Log component interactions (for analytics)
              */
@@ -187,10 +160,7 @@ $builderOutputPath = './output/'; // Path to builder output files
          * Website chính có thể load custom UI, styling, hoặc features
          */
         function handleProductComponentRendered(data) {
-            // Example: Apply custom styling based on product type
-            const productCards = document.querySelectorAll('[data-component-type="product"]');
-            
-            // Example: Initialize lazy loading for images
+            // Example: Initialize lazy loading for images (if LazyLoad library is available)
             if (typeof LazyLoad !== 'undefined') {
                 new LazyLoad({
                     elements_selector: '.product-image'
@@ -203,18 +173,12 @@ $builderOutputPath = './output/'; // Path to builder output files
                     itemCount: data?.items?.length || 0
                 });
             }
-
-            // Website chính có thể load custom templates từ PHP/Server dựa trên type
-            // loadCustomProductTemplate('product', data);
         }
 
         /**
          * Handle voucher component rendered
          */
         function handleVoucherComponentRendered(data) {
-            // Example: Apply custom styling or features
-            const voucherCards = document.querySelectorAll('[data-component-type="voucher"]');
-            
             // Example: Track analytics
             if (window.LandingPageComponents) {
                 window.LandingPageComponents.logInteraction('voucher', 'component_rendered', {
@@ -258,13 +222,9 @@ $builderOutputPath = './output/'; // Path to builder output files
                 showNotification('Có lỗi xảy ra khi thêm vào giỏ hàng', 'error');
             });
 
-            // Example 2: Hoặc sử dụng cart system của website chính
-            // if (window.CartSystem) {
-            //     window.CartSystem.add(productId, productData);
-            // }
-
-            // Example 3: Hoặc chỉ track analytics
-            // trackEvent('add_to_cart', { productId, productData });
+            // Alternative implementations:
+            // - Use website's cart system: window.CartSystem.add(productId, productData)
+            // - Track analytics only: trackEvent('add_to_cart', { productId, productData })
         }
 
         /**
@@ -347,67 +307,13 @@ $builderOutputPath = './output/'; // Path to builder output files
 
     <?php
     /**
-     * Example PHP function to get component data
-     * This shows how PHP can manage component data
+     * NOTE: In production, you may want to implement PHP functions to:
+     * - Get component data from database
+     * - Perform server-side rendering
+     * - Handle initial data loading
+     * 
+     * Example implementation can be found in mock-api.php
      */
-    function getComponentData($type, $endpoint) {
-        // Example: Fetch from database or external API
-        // This is just a mockup
-        
-        if ($type === 'product') {
-            // In real implementation, query database or call external API
-            return [
-                'items' => [
-                    [
-                        'id' => 1,
-                        'title' => 'Combo 2 Tã quần Sweety cỡ XL 40 miếng',
-                        'image' => 'https://via.placeholder.com/300x300',
-                        'price' => 278000,
-                        'originalPrice' => 310000,
-                        'discount' => true,
-                        'rating' => 4.5,
-                        'reviewCount' => 1250,
-                        'sales' => 50000
-                    ],
-                    // ... more products
-                ],
-                'pagination' => [
-                    'page' => 1,
-                    'total' => 100,
-                    'perPage' => 20
-                ]
-            ];
-        } elseif ($type === 'voucher') {
-            return [
-                'items' => [
-                    [
-                        'id' => 1,
-                        'title' => 'Giảm giá 20%',
-                        'code' => 'SAVE20',
-                        'description' => 'Áp dụng cho đơn hàng từ 500k',
-                        'value' => 'Giảm 20%',
-                        'expiryDate' => date('Y-m-d', strtotime('+30 days'))
-                    ],
-                    // ... more vouchers
-                ],
-                'pagination' => [
-                    'page' => 1,
-                    'total' => 10,
-                    'perPage' => 10
-                ]
-            ];
-        }
-        
-        return ['items' => [], 'pagination' => []];
-    }
-
-    /**
-     * Example: Output initial component data as JSON
-     * This can be used for server-side rendering or initial load
-     */
-    // Uncomment to output initial data
-    // $initialProductData = getComponentData('product', '/api/products/all');
-    // $initialVoucherData = getComponentData('voucher', '/api/vouchers/all');
     ?>
 </body>
 </html>

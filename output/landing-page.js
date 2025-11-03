@@ -18,7 +18,6 @@
    * Initialize Slider
    */
   function initSlider() {
-    const sliderWrapper = document.getElementById("slider-wrapper");
     const slides = document.querySelectorAll(".slider-item");
     const dots = document.querySelectorAll(".dot");
     const prevBtn = document.getElementById("slider-prev");

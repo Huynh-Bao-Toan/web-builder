@@ -12,6 +12,7 @@ Mô phỏng các file output từ Angular Builder để nhúng vào website PHP.
 ### Integration Files (cho PHP)
 - `api-handler.js` - Xử lý API calls khi nhận events từ builder JS
 - `example.php` - File PHP mẫu để nhúng các file output
+- `mock-api.php` - Mock API endpoint để test (có thể dùng để reference cấu trúc API response)
 
 ## Cách hoạt động
 
@@ -42,6 +43,7 @@ Khi tab được active, `landing-page.js` sẽ dispatch event:
 
 API phải trả về JSON với format chuẩn:
 
+#### Product API Response:
 ```json
 {
   "items": [
@@ -65,6 +67,29 @@ API phải trả về JSON với format chuẩn:
 }
 ```
 
+#### Voucher API Response:
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "title": "Giảm giá 20%",
+      "code": "SAVE20",
+      "description": "Áp dụng cho đơn hàng từ 500k",
+      "value": "Giảm 20%",
+      "expiryDate": "2024-02-01"
+    }
+  ],
+  "pagination": {
+    "page": 1,
+    "total": 10,
+    "perPage": 20
+  }
+}
+```
+
+**Note**: Xem `mock-api.php` để tham khảo implementation đầy đủ.
+
 ## Cách sử dụng trong PHP
 
 1. **Include files trong PHP:**
@@ -75,12 +100,29 @@ API phải trả về JSON với format chuẩn:
 <script src="api-handler.js"></script>
 ```
 
-2. **Set API base URL:**
+2. **Set API base URL (trước khi load api-handler.js):**
 ```javascript
+// Cho mock API (development)
+window.API_BASE_URL = './mock-api.php';
+
+// Hoặc cho real API (production)
 window.API_BASE_URL = 'https://your-api-domain.com';
 ```
 
-3. **Xem ví dụ đầy đủ trong `example.php`**
+3. **Listen to events và implement handlers (xem `example.php`):**
+```javascript
+// Listen to componentRendered event
+document.addEventListener('componentRendered', function(event) {
+    // Handle based on component type
+});
+
+// Listen to addToCart event
+document.addEventListener('addToCart', function(event) {
+    // Implement add to cart logic
+});
+```
+
+4. **Xem ví dụ đầy đủ trong `example.php`**
 
 ## Components
 
@@ -125,9 +167,11 @@ document.addEventListener('componentRendered', function(event) {
 
 ```javascript
 document.addEventListener('addToCart', function(event) {
-    const { productId, productData } = event.detail;
+    const { productId, productData, type, timestamp } = event.detail;
     // productId: ID của sản phẩm
-    // productData: Full product object với tất cả thông tin
+    // productData: Full product object với tất cả thông tin (id, title, image, price, etc.)
+    // type: "product" (always)
+    // timestamp: ISO timestamp của khi event được dispatch
     
     // Website chính xử lý ở đây:
     // - Gọi API add to cart
@@ -142,13 +186,17 @@ document.addEventListener('addToCart', function(event) {
 
 ```javascript
 document.addEventListener('voucherCopy', function(event) {
-    const { code } = event.detail;
+    const { code, type, timestamp } = event.detail;
     // code: Voucher code đã được copy
+    // type: "voucher" (always)
+    // timestamp: ISO timestamp của khi event được dispatch
     
     // Website chính có thể:
     // - Track analytics
     // - Show custom notification
     // - etc.
+    
+    // Note: Code đã được tự động copy vào clipboard (nếu browser hỗ trợ)
 });
 ```
 
@@ -158,15 +206,27 @@ Mỗi component item có `data-component-type` attribute để website chính nh
 
 ```html
 <!-- Product item -->
-<div class="product-card" data-component-type="product" data-product-id="123">
+<div class="product-card" 
+     data-component-type="product" 
+     data-product-id="123"
+     data-product-data='{"id":123,"title":"...","price":278000,...}'>
     <!-- ... -->
 </div>
 
 <!-- Voucher item -->
-<div class="voucher-card" data-component-type="voucher" data-voucher-id="456">
+<div class="voucher-card" 
+     data-component-type="voucher" 
+     data-voucher-id="456">
     <!-- ... -->
 </div>
 ```
+
+**Data Attributes:**
+- `data-component-type`: Loại component ("product" hoặc "voucher")
+- `data-product-id`: ID của sản phẩm (chỉ có ở product items)
+- `data-voucher-id`: ID của voucher (chỉ có ở voucher items)
+- `data-product-data`: Full product object được encode JSON (chỉ có ở product items, HTML-safe encoded)
+- `data-voucher-code`: Voucher code (chỉ có ở voucher copy button)
 
 Website chính có thể query và xử lý dựa trên type:
 
@@ -182,10 +242,19 @@ const voucherCards = document.querySelectorAll('[data-component-type="voucher"]'
 
 ### Global Functions (từ landing-page.js)
 - `window.updateLandingData(type, data)` - Cập nhật UI với data từ API
+  - `type`: "product" hoặc "voucher"
+  - `data`: Object với format `{items: [...], pagination: {...}}`
 
 ### Global Functions (từ api-handler.js)
-- `window.clearApiCache()` - Xóa cache API responses
+- `window.clearApiCache()` - Xóa cache API responses (useful khi cần refresh data)
 - `window.triggerApiCall(type, endpoint, tabId)` - Trigger API call thủ công
+  - `type`: "product" hoặc "voucher"
+  - `endpoint`: API endpoint path (e.g., "/api/products/sweety")
+  - `tabId`: Tab identifier (e.g., "sweety")
+
+### Optional Objects (từ example.php)
+- `window.LandingPageComponents` - Object optional để quản lý components
+  - `logInteraction(componentType, action, data)` - Log component interactions cho analytics
 
 ## Website chính Integration
 
@@ -198,13 +267,27 @@ Xem `example.php` để biết cách:
 
 ## Notes
 
+### Architecture
 - Builder JS không tự gọi API, chỉ dispatch events
 - Builder output không xử lý add to cart, chỉ emit event để website chính xử lý
 - PHP/API handler phải listen events và gọi API
-- Cache được implement trong api-handler.js
-- Responsive design hỗ trợ mobile
+- Cache được implement trong api-handler.js (sử dụng cache key: `${type}-${tabId}`)
+
+### Component Identification
 - Component items có `data-component-type` attribute để nhận biết type
-- Product items có `data-product-data` attribute chứa full product data (JSON encoded)
+- Product items có `data-product-data` attribute chứa full product data (JSON encoded, HTML-safe)
+- Product data trong `data-product-data` có thể được extract bằng cách decode HTML entities và parse JSON
+
+### API Handling
+- `api-handler.js` tự động detect mock API (nếu URL chứa "mock-api.php") và sử dụng query parameter
+- Với real API, endpoint sẽ được append trực tiếp vào `API_BASE_URL`
+- API responses được cache theo `${type}-${tabId}` key
+
+### UI/UX
+- Responsive design hỗ trợ mobile
+- Slider auto-play mỗi 5 giây
+- Loading states được hiển thị khi đang fetch data
+- Error states được hiển thị nếu API call fails
 
 ## Customization
 
