@@ -11,8 +11,20 @@ Mô phỏng các file output từ Angular Builder để nhúng vào website PHP.
 
 ### <span style="color: #8FABD4;">1.2 Integration Files (cho PHP)</span>
 - `api-handler.js` - Xử lý API calls khi nhận events từ builder JS
-- `example.php` - File PHP mẫu để nhúng các file output
+- `example.php` - File PHP mẫu để nhúng các file output từ file system
+- `example-db.php` - File PHP mẫu để load assets từ database (minified)
 - `mock-api.php` - Mock API endpoint để test (có thể dùng để reference cấu trúc API response)
+
+### <span style="color: #8FABD4;">1.3 Minified Bundle Files (cho Database Storage)</span>
+- `bundle/` - Thư mục chứa minified bundles
+  - `landing-page.css.min.txt` - CSS minified (single-line TEXT)
+  - `landing-page.html.min.txt` - HTML minified (single-line TEXT)
+  - `landing-page.js.min.txt` - JS minified (single-line TEXT)
+  - `bundle.json` - Bundle manifest với metadata (hash, size, version)
+- `bundle/database-schema.sql` - SQL schema cho lưu bundles vào database
+- `bundle/db-loader.php` - PHP class để load bundles từ database
+- `bundle/save-to-db.php` - Script để import bundle.json vào database
+- `minify-bundle.js` - Node.js script để minify files và tạo bundle.json
 
 ## <span style="color: #4A70A9;">2. Cách hoạt động</span>
 
@@ -123,6 +135,192 @@ document.addEventListener('addToCart', function(event) {
 ```
 
 4. **Xem ví dụ đầy đủ trong `example.php`**
+
+## <span style="color: #4A70A9;">3.1. Minified Bundle & Database Storage</span>
+
+### <span style="color: #8FABD4;">3.1.1 Tạo Minified Bundle</span>
+
+Để minify các file và tạo bundle JSON:
+
+```bash
+node minify-bundle.js
+```
+
+Script sẽ:
+- Minify CSS, HTML, JS thành single-line text
+- Tạo file `bundle/bundle.json` với manifest (hash, size, version)
+- Lưu minified content vào `bundle/*.min.txt`
+
+**Output:**
+```
+bundle/
+  ├── landing-page.css.min.txt    (minified CSS - TEXT/CLOB)
+  ├── landing-page.html.min.txt   (minified HTML - TEXT/CLOB)
+  ├── landing-page.js.min.txt      (minified JS - TEXT/CLOB)
+  └── bundle.json                  (manifest với metadata)
+```
+
+### <span style="color: #8FABD4;">3.1.2 Lưu Bundle vào Database</span>
+
+**Bước 1: Tạo database schema**
+```sql
+-- Chạy script SQL
+source bundle/database-schema.sql
+```
+
+**Bước 2: Import bundle vào database**
+```bash
+php bundle/save-to-db.php [version] [status]
+# Ví dụ:
+php bundle/save-to-db.php 1.0.0 draft
+php bundle/save-to-db.php 1.0.0 published
+```
+
+Hoặc trong PHP code:
+```php
+require_once './bundle/db-loader.php';
+
+$db = new PDO(/* your db config */);
+$loader = new BuilderBundleLoader($db, 'landing-page');
+
+// Save from bundle.json
+$loader->saveBundleFromJson('./bundle/bundle.json', '1.0.0', 'published');
+
+// Publish bundle
+$loader->publishBundle('1.0.0');
+```
+
+### <span style="color: #8FABD4;">3.1.3 Load Bundle từ Database</span>
+
+Xem `example-db.php` để xem implementation đầy đủ:
+
+```php
+require_once './bundle/db-loader.php';
+
+$db = new PDO(/* your db config */);
+$loader = new BuilderBundleLoader($db, 'landing-page', 'preview', $cdnBaseUrl);
+
+// Load published bundle (production)
+$bundle = $loader->loadBundle(null, 'published');
+
+// Load specific version (preview)
+$bundle = $loader->loadBundle('1.0.0');
+
+// $bundle contains:
+// - css, html, js: content hoặc CDN URL
+// - mode: 'db' hoặc 'cdn'
+// - version, manifest, hashes, sizes
+```
+
+**Usage trong PHP:**
+```php
+<?php if ($bundle['mode'] === 'cdn'): ?>
+    <!-- Production: Load from CDN -->
+    <link rel="stylesheet" href="<?php echo $bundle['css']; ?>">
+    <script src="<?php echo $bundle['js']; ?>"></script>
+<?php else: ?>
+    <!-- Preview: Inline from database -->
+    <style><?php echo $bundle['css']; ?></style>
+    <script><?php echo $bundle['js']; ?></script>
+<?php endif; ?>
+```
+
+## <span style="color: #4A70A9;">3.2. Hybrid Architecture (DB + CDN) - Khuyến nghị</span>
+
+### <span style="color: #8FABD4;">3.2.1 Phương án lai (Recommended)</span>
+
+**Kiến trúc:**
+- **Database**: Lưu bản chuẩn (text thuần) + manifest JSON (hash, size, version)
+- **CI/CD**: Khi "Publish" → job build & ghi file ra thư mục version → đẩy lên CDN
+- **Runtime**:
+  - **Production**: PHP chỉ nhúng URL asset tĩnh (có hash) từ CDN
+  - **Preview**: PHP serve trực tiếp từ DB (endpoint `/preview/...`) cho người soạn nội dung
+
+### <span style="color: #8FABD4;">3.2.2 Workflow</span>
+
+```
+1. Builder tạo output → minify → bundle.json
+2. Lưu vào DB với status='draft'
+3. Preview: Load từ DB (inline CSS/JS)
+4. Publish: 
+   - Build files → /assets/v1.0.0/
+   - Upload lên CDN (S3/CloudFront)
+   - Update DB: status='published', cdn_css_url, cdn_js_url
+5. Production: Load từ CDN URLs
+```
+
+### <span style="color: #8FABD4;">3.2.3 Quy tắc nhanh để quyết định</span>
+
+| Tình huống | Nên chọn |
+|------------|----------|
+| Traffic thật, tối ưu tốc độ/chi phí | Ghi file tĩnh + CDN |
+| Preview/draft nội bộ | Load từ DB |
+| Cần rollback nhanh | Dùng versioning + symlink hoặc CDN version path |
+| Thay đổi theo người dùng (personalization runtime) | Load từ API/DB + hydrate, nhưng asset tĩnh vẫn nên ở CDN |
+
+### <span style="color: #8FABD4;">3.2.4 Database Schema</span>
+
+```sql
+CREATE TABLE builder_bundles (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    version VARCHAR(50) NOT NULL,
+    name VARCHAR(255) NOT NULL DEFAULT 'landing-page',
+    -- Asset content stored as TEXT/CLOB
+    css_content TEXT NOT NULL,
+    html_content TEXT NOT NULL,
+    js_content TEXT NOT NULL,
+    -- Manifest metadata (JSON)
+    manifest JSON,
+    -- Hash for cache invalidation
+    css_hash VARCHAR(32),
+    html_hash VARCHAR(32),
+    js_hash VARCHAR(32),
+    -- File sizes
+    css_size INT,
+    html_size INT,
+    js_size INT,
+    -- CDN paths (for production)
+    cdn_css_url VARCHAR(500) NULL,
+    cdn_html_url VARCHAR(500) NULL,
+    cdn_js_url VARCHAR(500) NULL,
+    -- Status: draft, published, archived
+    status ENUM('draft', 'published', 'archived') DEFAULT 'draft',
+    -- Timestamps
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    published_at TIMESTAMP NULL
+);
+```
+
+### <span style="color: #8FABD4;">3.2.5 Example: CI/CD Pipeline</span>
+
+```bash
+# 1. Build & minify
+node minify-bundle.js
+
+# 2. Save to DB (draft)
+php bundle/save-to-db.php $VERSION draft
+
+# 3. Build static files
+mkdir -p assets/$VERSION
+cp bundle/*.min.txt assets/$VERSION/
+
+# 4. Upload to CDN
+aws s3 sync assets/$VERSION s3://cdn.example.com/assets/$VERSION
+
+# 5. Update CDN URLs in DB & publish
+php -r "
+require 'bundle/db-loader.php';
+\$loader = new BuilderBundleLoader(\$db, 'landing-page');
+\$loader->updateCdnUrls(
+    '$VERSION',
+    'https://cdn.example.com/assets/$VERSION/landing-page.css.min.txt',
+    'https://cdn.example.com/assets/$VERSION/landing-page.html.min.txt',
+    'https://cdn.example.com/assets/$VERSION/landing-page.js.min.txt'
+);
+\$loader->publishBundle('$VERSION');
+"
+```
 
 ## <span style="color: #4A70A9;">4. Components</span>
 
