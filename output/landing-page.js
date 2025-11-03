@@ -179,6 +179,7 @@
 
   /**
    * Render Product Items from API response
+   * Sử dụng template từ website chính nếu có (window.renderProductItem hoặc window.renderProducts)
    */
   function renderProducts(data) {
     const productsGrid = document.getElementById("products-grid");
@@ -187,6 +188,57 @@
       productsGrid.innerHTML = '<div class="products-loading">Không có sản phẩm nào</div>';
       return;
     }
+
+    // Check if website chính provides custom render template
+    if (typeof window.renderProducts === 'function') {
+      // Website chính provides full render function
+      window.renderProducts(data, productsGrid);
+      dispatchComponentRenderedEvent("product", data);
+      return;
+    }
+
+    if (typeof window.renderProductItem === 'function') {
+      // Website chính provides item-level render function
+      const productsHTML = data.items
+        .map((product) => window.renderProductItem(product))
+        .join("");
+
+      productsGrid.innerHTML = productsHTML;
+      
+      // Attach event listeners to add-to-cart buttons
+      attachAddToCartListeners();
+      
+      // Emit component rendered event for website chính to handle
+      dispatchComponentRenderedEvent("product", data);
+      return;
+    }
+
+    // Fallback: Default render (for backward compatibility or testing)
+    // Emit event để website chính biết cần tự render
+    const event = new CustomEvent("renderProductsRequested", {
+      detail: {
+        type: "product",
+        data: data,
+        targetElement: productsGrid,
+        timestamp: new Date().toISOString(),
+      },
+      bubbles: true,
+      cancelable: true,
+    });
+
+    document.dispatchEvent(event);
+
+    // Nếu event không bị preventDefault, sử dụng default render
+    if (!event.defaultPrevented) {
+      renderProductsDefault(data);
+    }
+  }
+
+  /**
+   * Default product render (fallback, chỉ dùng khi website chính không provide template)
+   */
+  function renderProductsDefault(data) {
+    const productsGrid = document.getElementById("products-grid");
 
     const productsHTML = data.items
       .map((product) => {
@@ -201,7 +253,6 @@
         const stars = "★".repeat(Math.floor(product.rating || 5));
 
         // Store full product data in data attribute for easy extraction
-        // Use HTML attribute safe encoding
         const productDataJson = JSON.stringify(product)
           .replace(/&/g, "&amp;")
           .replace(/"/g, "&quot;")
@@ -233,16 +284,13 @@
       .join("");
 
     productsGrid.innerHTML = productsHTML;
-
-    // Attach event listeners to add-to-cart buttons
     attachAddToCartListeners();
-
-    // Emit component rendered event for website chính to handle
     dispatchComponentRenderedEvent("product", data);
   }
 
   /**
    * Render Voucher Items from API response
+   * Sử dụng template từ website chính nếu có (window.renderVoucherItem hoặc window.renderVouchers)
    */
   function renderVouchers(data) {
     const vouchersGrid = document.getElementById("vouchers-grid");
@@ -251,6 +299,56 @@
       vouchersGrid.innerHTML = '<div class="vouchers-loading">Không có voucher nào</div>';
       return;
     }
+
+    // Check if website chính provides custom render template
+    if (typeof window.renderVouchers === 'function') {
+      // Website chính provides full render function
+      window.renderVouchers(data, vouchersGrid);
+      dispatchComponentRenderedEvent("voucher", data);
+      return;
+    }
+
+    if (typeof window.renderVoucherItem === 'function') {
+      // Website chính provides item-level render function
+      const vouchersHTML = data.items
+        .map((voucher) => window.renderVoucherItem(voucher))
+        .join("");
+
+      vouchersGrid.innerHTML = vouchersHTML;
+      
+      // Attach event listeners to voucher copy buttons
+      attachVoucherCopyListeners();
+      
+      // Emit component rendered event for website chính to handle
+      dispatchComponentRenderedEvent("voucher", data);
+      return;
+    }
+
+    // Fallback: Emit event để website chính biết cần tự render
+    const event = new CustomEvent("renderVouchersRequested", {
+      detail: {
+        type: "voucher",
+        data: data,
+        targetElement: vouchersGrid,
+        timestamp: new Date().toISOString(),
+      },
+      bubbles: true,
+      cancelable: true,
+    });
+
+    document.dispatchEvent(event);
+
+    // Nếu event không bị preventDefault, sử dụng default render
+    if (!event.defaultPrevented) {
+      renderVouchersDefault(data);
+    }
+  }
+
+  /**
+   * Default voucher render (fallback, chỉ dùng khi website chính không provide template)
+   */
+  function renderVouchersDefault(data) {
+    const vouchersGrid = document.getElementById("vouchers-grid");
 
     const vouchersHTML = data.items
       .map((voucher) => {
@@ -277,11 +375,7 @@
       .join("");
 
     vouchersGrid.innerHTML = vouchersHTML;
-
-    // Attach event listeners to voucher copy buttons
     attachVoucherCopyListeners();
-
-    // Emit component rendered event for website chính to handle
     dispatchComponentRenderedEvent("voucher", data);
   }
 

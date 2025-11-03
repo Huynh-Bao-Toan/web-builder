@@ -49,6 +49,135 @@ $builderOutputPath = './output/'; // Path to builder output files
         // Set API base URL for api-handler (using mock API)
         window.API_BASE_URL = '<?php echo $apiBaseUrl; ?>mock-api.php';
 
+        // ============================================
+        // Render Template Functions - Website chính cung cấp
+        // Builder output sẽ sử dụng các functions này để render UI
+        // ============================================
+
+        /**
+         * Render Product Item Template
+         * Website chính cung cấp template này để render từng product item
+         * @param {Object} product - Product object từ API
+         * @returns {string} HTML string của product card
+         */
+        window.renderProductItem = function(product) {
+            // Calculate discount percentage
+            const discountPercent = product.discount
+                ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
+                : 0;
+
+            // Format rating stars
+            const stars = "★".repeat(Math.floor(product.rating || 5));
+
+            // Store full product data in data attribute (HTML-safe encoded)
+            const productDataJson = JSON.stringify(product)
+                .replace(/&/g, "&amp;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;");
+
+            // Format price (you can customize this)
+            const formatPrice = (price) => {
+                return new Intl.NumberFormat("vi-VN", {
+                    style: "currency",
+                    currency: "VND",
+                }).format(price);
+            };
+
+            // Format sales
+            const formatSales = (sales) => {
+                if (sales >= 1000000) {
+                    return (sales / 1000000).toFixed(1) + "M+";
+                } else if (sales >= 1000) {
+                    return (sales / 1000).toFixed(0) + "K+";
+                }
+                return sales + "+";
+            };
+
+            return `
+                <div class="product-card" 
+                     data-component-type="product" 
+                     data-product-id="${product.id}" 
+                     data-product-data='${productDataJson}'>
+                    <img src="${product.image}" alt="${product.title}" class="product-image" />
+                    <div class="product-info">
+                        <h3 class="product-title">${product.title}</h3>
+                        <div class="product-rating">
+                            <span class="product-rating-stars">${stars}</span>
+                            <span class="product-rating-text">(${product.reviewCount || 0})</span>
+                        </div>
+                        <div class="product-sales">Đã bán ${formatSales(product.sales)}</div>
+                        <div class="product-price">${formatPrice(product.price)}</div>
+                        ${discountPercent > 0 ? `<span class="product-discount">-${discountPercent}%</span>` : ""}
+                        <div class="product-actions">
+                            <button class="add-to-cart" data-product-id="${product.id}">
+                                Thêm vào giỏ
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        };
+
+        /**
+         * Render Voucher Item Template
+         * Website chính cung cấp template này để render từng voucher item
+         * @param {Object} voucher - Voucher object từ API
+         * @returns {string} HTML string của voucher card
+         */
+        window.renderVoucherItem = function(voucher) {
+            // Format date
+            const formatDate = (dateString) => {
+                const date = new Date(dateString);
+                return date.toLocaleDateString("vi-VN");
+            };
+
+            return `
+                <div class="voucher-card" 
+                     data-component-type="voucher" 
+                     data-voucher-id="${voucher.id}">
+                    <div class="voucher-header">
+                        <div class="voucher-title">${voucher.title}</div>
+                        <div class="voucher-code">${voucher.code}</div>
+                    </div>
+                    <div class="voucher-description">${voucher.description}</div>
+                    <div class="voucher-value">${voucher.value}</div>
+                    <div class="voucher-footer">
+                        <div class="voucher-validity">
+                            <span>📅</span>
+                            <span>HSD: ${formatDate(voucher.expiryDate)}</span>
+                        </div>
+                        <button class="voucher-copy-btn" data-voucher-code="${voucher.code}">
+                            Sao chép
+                        </button>
+                    </div>
+                </div>
+            `;
+        };
+
+        /**
+         * Alternative: Full Render Function
+         * Nếu bạn muốn kiểm soát hoàn toàn việc render (bao gồm cả grid container)
+         * thì có thể sử dụng window.renderProducts hoặc window.renderVouchers
+         * 
+         * @param {Object} data - Full data object với items array
+         * @param {HTMLElement} targetElement - Grid container element
+         */
+        /*
+        window.renderProducts = function(data, targetElement) {
+            // Your custom rendering logic here
+            // You have full control over the grid container and all items
+            targetElement.innerHTML = data.items.map(item => {
+                // Your template
+            }).join('');
+        };
+
+        window.renderVouchers = function(data, targetElement) {
+            // Your custom rendering logic here
+        };
+        */
+
         // Optional: Component management functions
         window.LandingPageComponents = {
             /**
